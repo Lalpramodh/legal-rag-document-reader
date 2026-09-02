@@ -16,8 +16,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from PIL import Image
 from pydantic import BaseModel, EmailStr
 from sentence_transformers import SentenceTransformer
-from transformers import T5ForConditionalGeneration, T5Tokenizer
-
+from pydantic import BaseModel, EmailStr
+from sentence_transformers import SentenceTransformer
+from groq import AsyncGroq
 load_dotenv()
 
 app = FastAPI(title="Legal RAG Document Reader", version="1.0.0")
@@ -42,14 +43,17 @@ users_collection = db.users
 queries_collection = db.queries
 
 # ---------------------------- Models ----------------------------
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2")
-LLM_MODEL_NAME = os.getenv("LLM_MODEL", "google/flan-t5-base")
+EMBEDDING_MODEL_NAME = os.getenv(
+    "EMBEDDING_MODEL",
+    "sentence-transformers/all-mpnet-base-v2"
+)
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-tokenizer = T5Tokenizer.from_pretrained(LLM_MODEL_NAME)
-model = T5ForConditionalGeneration.from_pretrained(LLM_MODEL_NAME).to(DEVICE)
-model.eval()
+
+groq_client = AsyncGroq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 EMBEDDING_DIM = 768
 
@@ -214,27 +218,56 @@ def retrieve_context(query: str, top_k: int = 3):
     return "", "none"
 
 
-@torch.inference_mode()
-def generate_flan(prompt: str, max_input_length: int = 512, max_output_length: int = 220) -> str:
-    inputs = tokenizer(
-        prompt,
-        return_tensors="pt",
-        truncation=True,
-        max_length=max_input_length,
-    ).to(DEVICE)
-    outputs = model.generate(
-        **inputs,
-        max_length=max_output_length,
-        num_beams=2,
-        early_stopping=True,
-    )
-    return tokenizer.decode(outputs[0], skip_special_tokens=True)
+async def generate_groq(prompt: str, max_output_tokens: int = 220) -> str:
+    if not groq_client:
+        raise HTTPException(
+            status_code=500,
+            detail="GROQ_API_KEY is not configured."
+        )
+
+    try:
+        completion = await groq_client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a careful legal document assistant. "
+                        "Answer clearly and accurately. "
+                        "When context is provided, use only that context "
+                        "and do not invent facts."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            temperature=0.1,
+            max_completion_tokens=max_output_tokens,
+        )
+
+        return completion.choices[0].message.content.strip()
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Groq generation failed: {exc}"
+        )
 
 
-def summarize_text(text: str) -> str:
-    # Keep each generation small enough for the base model.
+async def summarize_text(text: str) -> str:
     chunks = [text[i : i + 1800] for i in range(0, len(text), 1800)]
-    summaries = [generate_flan(f"summarize: {chunk}", 512, 160) for chunk in chunks[:12]]
+
+    summaries = []
+
+    for chunk in chunks[:12]:
+        summary = await generate_groq(
+            f"Summarize the following legal document text clearly and concisely:\n\n{chunk}",
+            max_output_tokens=160,
+        )
+        summaries.append(summary)
+
     return " ".join(summaries)
 
 
@@ -328,7 +361,7 @@ async def upload_legal_doc(file: UploadFile = File(...)):
     )
     add_uploaded_document(extracted_text, filename)
 
-    summary = summarize_text(extracted_text)
+    summary = await summarize_text(extracted_text)
     return {
         "message": "Document processed and indexed successfully!",
         "filename": filename,
@@ -354,7 +387,7 @@ async def answer_legal_question(request: ChatRequest):
     else:
         prompt = f"Answer briefly and clearly: {question}"
 
-    answer = generate_flan(prompt)
+    answer = await generate_groq(prompt)
     await queries_collection.insert_one({"question": question, "source": source, "answer": answer})
     return {"answer": answer, "source": source}
 
