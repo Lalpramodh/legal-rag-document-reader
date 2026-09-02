@@ -7,7 +7,6 @@ import faiss
 import fitz
 import numpy as np
 import pytesseract
-import torch
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
