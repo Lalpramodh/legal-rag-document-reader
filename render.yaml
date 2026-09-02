@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: legal-rag-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: MONGO_DB
+        value: legal_assistant
+      - key: ALLOWED_ORIGINS
+        sync: false
