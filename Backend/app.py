@@ -14,9 +14,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from PIL import Image
 from pydantic import BaseModel, EmailStr
-from sentence_transformers import SentenceTransformer
-from pydantic import BaseModel, EmailStr
-from sentence_transformers import SentenceTransformer
 from groq import AsyncGroq
 load_dotenv()
 
