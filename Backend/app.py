@@ -12,6 +12,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from fastembed import TextEmbedding
 from PIL import Image
 from pydantic import BaseModel, EmailStr
 from groq import AsyncGroq
@@ -47,11 +48,13 @@ EMBEDDING_MODEL_NAME = os.getenv(
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
-embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+embedding_model = TextEmbedding(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
+)
 
 groq_client = AsyncGroq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
-EMBEDDING_DIM = 768
+EMBEDDING_DIM = 384
 
 # Two retrieval stores:
 # 1) knowledge base bundled with the repository
