@@ -4,7 +4,7 @@ certifi==2025.6.15
 charset-normalizer==3.4.2
 click==8.2.1
 dnspython==2.7.0
-faiss-cpu==1.11.0
+faiss-cpu==1.15.0
 fastapi==0.115.12
 filelock==3.18.0
 fsspec==2025.5.1
