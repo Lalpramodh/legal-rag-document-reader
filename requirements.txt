@@ -38,7 +38,6 @@ rich==14.0.0
 safetensors==0.5.3
 scikit-learn==1.7.0
 scipy==1.15.3
-sentence-transformers==4.1.0
 setuptools==80.9.0
 shellingham==1.5.4
 smart-open==7.1.0
