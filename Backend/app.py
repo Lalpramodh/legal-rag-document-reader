@@ -3,6 +3,7 @@ import os
 import re
 import json
 import hashlib
+import traceback
 from typing import List
 
 import faiss
@@ -898,103 +899,165 @@ async def upload_legal_doc(
     file: UploadFile = File(...)
 ):
 
-    filename = (
-        file.filename
-        or "document"
-    )
+    try:
 
-    extension = os.path.splitext(
-        filename.lower()
-    )[1]
-
-    if extension not in {
-        ".pdf",
-        ".png",
-        ".jpg",
-        ".jpeg"
-    }:
-
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Unsupported file format. "
-                "Only PDF, JPG, and PNG "
-                "are allowed."
-            )
+        filename = (
+            file.filename
+            or "document"
         )
 
-    data = await file.read()
-
-    if extension == ".pdf":
-
-        extracted_text = (
-            extract_text_from_pdf_bytes(
-                data
-            )
+        print(
+            f"[UPLOAD] Starting upload: {filename}"
         )
 
-    else:
+        extension = os.path.splitext(
+            filename.lower()
+        )[1]
 
-        extracted_text = (
-            extract_text_from_image_bytes(
-                data
+        if extension not in {
+            ".pdf",
+            ".png",
+            ".jpg",
+            ".jpeg"
+        }:
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Unsupported file format. "
+                    "Only PDF, JPG, and PNG "
+                    "are allowed."
+                )
             )
+
+        data = await file.read()
+
+        print(
+            f"[UPLOAD] File read successfully: "
+            f"{len(data)} bytes"
         )
 
-    if not extracted_text:
+        if extension == ".pdf":
 
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "No text could be extracted "
-                "from the document."
+            print("[UPLOAD] Extracting text from PDF...")
+
+            extracted_text = (
+                extract_text_from_pdf_bytes(
+                    data
+                )
             )
+
+        else:
+
+            print("[UPLOAD] Extracting text from image...")
+
+            extracted_text = (
+                extract_text_from_image_bytes(
+                    data
+                )
+            )
+
+        print(
+            f"[UPLOAD] Text extraction complete: "
+            f"{len(extracted_text)} characters"
         )
 
-    # Generate 384-dimensional embedding
-    vector = create_embedding(
-        extracted_text
-    )
+        if not extracted_text:
 
-    # Store in MongoDB
-    await documents_collection.insert_one(
-        {
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "No text could be extracted "
+                    "from the document."
+                )
+            )
+
+        print("[UPLOAD] Creating FastEmbed vector...")
+
+        # Generate 384-dimensional embedding
+        vector = create_embedding(
+            extracted_text
+        )
+
+        print(
+            f"[UPLOAD] Embedding created: "
+            f"shape={vector.shape}, "
+            f"dtype={vector.dtype}"
+        )
+
+        print("[UPLOAD] Saving document to MongoDB...")
+
+        # Store in MongoDB
+        await documents_collection.insert_one(
+            {
+                "filename":
+                    filename,
+
+                "text":
+                    extracted_text,
+
+                "embedding":
+                    vector[0].tolist()
+            }
+        )
+
+        print("[UPLOAD] MongoDB insert successful.")
+
+        print("[UPLOAD] Adding document to FAISS index...")
+
+        # Add to in-memory FAISS index
+        add_uploaded_document(
+            extracted_text,
+            filename
+        )
+
+        print("[UPLOAD] FAISS indexing successful.")
+
+        print("[UPLOAD] Generating summary with Groq...")
+
+        # Generate summary using Groq
+        summary = await summarize_text(
+            extracted_text
+        )
+
+        print("[UPLOAD] Groq summary generated successfully.")
+
+        return {
+
+            "message":
+                "Document processed and indexed successfully!",
+
             "filename":
                 filename,
 
-            "text":
-                extracted_text,
+            "extracted_text":
+                extracted_text[:500],
 
-            "embedding":
-                vector[0].tolist()
+            "summary":
+                summary
         }
-    )
 
-    # Add to in-memory FAISS index
-    add_uploaded_document(
-        extracted_text,
-        filename
-    )
+    except HTTPException:
+        raise
 
-    # Generate summary using Groq
-    summary = await summarize_text(
-        extracted_text
-    )
+    except Exception as exc:
 
-    return {
+        print(
+            "[UPLOAD ERROR] "
+            f"{type(exc).__name__}: {exc}"
+        )
 
-        "message":
-            "Document processed and indexed successfully!",
+        print(
+            traceback.format_exc()
+        )
 
-        "filename":
-            filename,
-
-        "extracted_text":
-            extracted_text[:500],
-
-        "summary":
-            summary
-    }
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Document upload failed: "
+                f"{type(exc).__name__}: {exc}"
+            )
+        )
 
 
 # ---------------------------- Chatbot ----------------------------
