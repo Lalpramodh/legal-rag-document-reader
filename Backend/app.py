@@ -1037,8 +1037,13 @@ async def upload_legal_doc(
                 summary
         }
 
-    except HTTPException:
-        raise
+    except HTTPException as exc:
+    print(
+        f"[UPLOAD HTTP ERROR] "
+        f"status={exc.status_code}, "
+        f"detail={exc.detail}"
+    )
+    raise
 
     except Exception as exc:
 
