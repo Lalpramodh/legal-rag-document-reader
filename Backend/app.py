@@ -64,10 +64,11 @@ EMBEDDING_MODEL_NAME = os.getenv(
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-GROQ_MODEL = os.getenv(
-    "GROQ_MODEL",
-    "llama-3.1-8b-instant"
-)
+DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
+GROQ_MODEL = os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL).strip()
+
+if not GROQ_MODEL or GROQ_MODEL == "llama-3.3-70b-versatile":
+    GROQ_MODEL = DEFAULT_GROQ_MODEL
 
 # FastEmbed uses ONNX instead of PyTorch/SentenceTransformers. Keep model
 # creation lazy so Render can start the web process before downloading it.
