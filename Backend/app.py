@@ -631,13 +631,16 @@ async def generate_groq(
             )
         )
 
-        return (
-            completion
-            .choices[0]
-            .message
-            .content
-            .strip()
-        )
+        message = completion.choices[0].message
+        answer = (message.content or "").strip()
+
+        if not answer:
+            raise HTTPException(
+                status_code=502,
+                detail="Groq returned an empty response."
+            )
+
+        return answer
 
     except Exception as exc:
 
@@ -1124,6 +1127,8 @@ async def answer_legal_question(
 
     question = request.question.strip()
 
+    print(f"[CHAT] Received question ({len(question)} characters)")
+
     if not question:
 
         raise HTTPException(
@@ -1158,6 +1163,11 @@ async def answer_legal_question(
 
     answer = await generate_groq(
         prompt
+    )
+
+    print(
+        f"[CHAT] Generated answer ({len(answer)} characters) "
+        f"from {source}"
     )
 
     await queries_collection.insert_one(
