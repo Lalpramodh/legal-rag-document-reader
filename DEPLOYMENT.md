@@ -8,7 +8,7 @@ Environment variables:
 - `MONGO_DB` = `legal_assistant`
 - `ALLOWED_ORIGINS` = deployed Vercel URL (comma-separated if multiple)
 - `GROQ_API_KEY` = Groq API key
-- `GROQ_MODEL` = `llama-3.1-8b-instant` (optional)
+- `GROQ_MODEL` = `openai/gpt-oss-20b` (optional; the backend verifies availability)
 
 Health endpoint: `/health`
 

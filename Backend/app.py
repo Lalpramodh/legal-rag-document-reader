@@ -64,11 +64,9 @@ EMBEDDING_MODEL_NAME = os.getenv(
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
 GROQ_MODEL = os.getenv("GROQ_MODEL", DEFAULT_GROQ_MODEL).strip()
-
-if not GROQ_MODEL or GROQ_MODEL == "llama-3.3-70b-versatile":
-    GROQ_MODEL = DEFAULT_GROQ_MODEL
+groq_model_checked = False
 
 # FastEmbed uses ONNX instead of PyTorch/SentenceTransformers. Keep model
 # creation lazy so Render can start the web process before downloading it.
@@ -540,6 +538,52 @@ def retrieve_context(
 
 # ---------------------------- Groq LLM ----------------------------
 
+async def get_groq_model() -> str:
+    """Use a model that is currently available to this Groq account."""
+
+    global GROQ_MODEL, groq_model_checked
+
+    if groq_model_checked:
+        return GROQ_MODEL
+
+    if not groq_client:
+        return GROQ_MODEL
+
+    try:
+        model_list = await groq_client.models.list()
+        available_models = {
+            model.id
+            for model in model_list.data
+        }
+
+        preferred_models = [
+            GROQ_MODEL,
+            "openai/gpt-oss-20b",
+            "openai/gpt-oss-120b",
+            "meta-llama/llama-4-scout-17b-16e-instruct",
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+        ]
+
+        GROQ_MODEL = next(
+            (
+                model_name
+                for model_name in preferred_models
+                if model_name in available_models
+            ),
+            GROQ_MODEL,
+        )
+        groq_model_checked = True
+
+    except Exception as exc:
+        print(
+            f"[GROQ] Could not list available models: {exc}. "
+            f"Using configured model {GROQ_MODEL}."
+        )
+
+    print(f"[GROQ] Using model: {GROQ_MODEL}")
+    return GROQ_MODEL
+
 async def generate_groq(
     prompt: str,
     max_output_tokens: int = 220
@@ -555,6 +599,8 @@ async def generate_groq(
             )
         )
 
+    model_name = await get_groq_model()
+
     try:
 
         completion = (
@@ -562,7 +608,7 @@ async def generate_groq(
             .chat
             .completions
             .create(
-                model=GROQ_MODEL,
+                model=model_name,
                 messages=[
                     {
                         "role": "system",
