@@ -33,7 +33,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB = os.getenv("MONGO_DB", "legal_assistant")
 
 ALLOWED_ORIGINS = [
-    origin.strip()
+    origin.strip().rstrip("/")
     for origin in os.getenv("ALLOWED_ORIGINS", "*").split(",")
     if origin.strip()
 ]
@@ -69,11 +69,9 @@ GROQ_MODEL = os.getenv(
     "llama-3.1-8b-instant"
 )
 
-# FastEmbed uses ONNX instead of PyTorch/SentenceTransformers.
-# This is much lighter for Render's free 512 MB instance.
-embedding_model = TextEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+# FastEmbed uses ONNX instead of PyTorch/SentenceTransformers. Keep model
+# creation lazy so Render can start the web process before downloading it.
+embedding_model = None
 
 groq_client = (
     AsyncGroq(api_key=GROQ_API_KEY)
@@ -127,9 +125,14 @@ def create_embedding(text: str) -> np.ndarray:
     Generate a single 384-dimensional embedding using FastEmbed.
     """
 
-    embeddings = list(
-        embedding_model.embed([text])
-    )
+    global embedding_model
+
+    if embedding_model is None:
+        embedding_model = TextEmbedding(
+            model_name=EMBEDDING_MODEL_NAME
+        )
+
+    embeddings = list(embedding_model.embed([text]))
 
     vector = np.asarray(
         embeddings[0],
